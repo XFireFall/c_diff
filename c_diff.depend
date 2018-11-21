@@ -1,0 +1,10 @@
+# depslib dependency file v1.0
+1542823120 source:/home/oleg/code_blocks_projects/c_diff/main.c
+	<stdio.h>
+	<stdlib.h>
+	<assert.h>
+	"../c_akinator/lib/constants.h"
+	<ctype.h>
+
+1542174857 /home/oleg/code_blocks_projects/c_akinator/lib/constants.h
+
