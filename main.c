@@ -14,24 +14,32 @@
 #define R  Tree_d_item_copy(old->right)
 #define dR Tree_d_item_diff(R)
 
+
 #define CONST( var )  (Tree_d_item_create(CONST, var,   NULL, NULL))
 #define PLUS( a, b )  (Tree_d_item_create(OP,    '+',   a,    b   ))
 #define MINUS( a, b ) (Tree_d_item_create(OP,    '-',   a,    b   ))
 #define MUL( a, b )   (Tree_d_item_create(OP,    '*',   a,    b   ))
 #define DIV( a, b )   (Tree_d_item_create(OP,    '/',   a,    b   ))
 #define POW( a, b )   (Tree_d_item_create(OP,    '^',   a,    b   ))
+#define LOG( a, b )   (Tree_d_item_create(OP,    F_LOG, a,    b   ))
 #define LN( var )     (Tree_d_item_create(OP,    F_LN,  var,  NULL))
 #define SIN( var )    (Tree_d_item_create(OP,    F_SIN, var,  NULL))
 #define COS( var )    (Tree_d_item_create(OP,    F_COS, var,  NULL))
 
-#define IS_MUL( var )   (var->type == OP && var->data.code == '*')
-#define IS_CONST( var ) (var->type == CONST)
-#define IS_PLUS( var )  (var->type == OP && var->data.code == '+')
-#define IS_DIV( var )   (var->type == OP && var->data.code == '/')
-#define IS_MINUS( var ) (var->type == OP && var->data.code == '-')
-#define IS_POW( var )   (var->type == OP && var->data.code == '^')
-#define IS_SIN( var )   (var->type == OP && var->data.code == F_SIN)
-#define IS_COS( var )   (var->type == OP && var->data.code == F_COS)
+#define IS_CONST( var ) (var != NULL && var->type == CONST)
+#define IS_PLUS( var )  (var != NULL && var->type == OP && var->data.code == '+')
+#define IS_MINUS( var ) (var != NULL && var->type == OP && var->data.code == '-')
+#define IS_MUL( var )   (var != NULL && var->type == OP && var->data.code == '*')
+#define IS_DIV( var )   (var != NULL && var->type == OP && var->data.code == '/')
+#define IS_POW( var )   (var != NULL && var->type == OP && var->data.code == '^')
+#define IS_LOG( var )   (var != NULL && var->type == OP && var->data.code == F_LOG)
+#define IS_LN( var )    (var != NULL && var->type == OP && var->data.code == F_LN)
+#define IS_SIN( var )   (var != NULL && var->type == OP && var->data.code == F_SIN)
+#define IS_COS( var )   (var != NULL && var->type == OP && var->data.code == F_COS)
+
+#define PREFIX  (0)
+#define INFIX   (1)
+#define POSTFIX (2)
 
 enum {
     UNTYPED,
@@ -41,10 +49,10 @@ enum {
     };
 
 enum {
+    F_LOG = 'l',
+    F_LN  = 'n',
     F_SIN = 's',
     F_COS = 'c',
-    F_LOG = 'l',
-    F_LN  = 'n'
     };
 
 
@@ -133,10 +141,11 @@ void Tree_d_item_dump(struct Tree_d_item* this, int num_of_tabs)
 
     printtabs(num_of_tabs);
 
-    if(this->right == NULL)
+    if(this->type != OP)
         printf(RED);
     else
         printf(BLUE);
+
     if(this->type == VAR || this->type == OP)
         printf("%c", this->data.code);
     else
@@ -146,25 +155,9 @@ void Tree_d_item_dump(struct Tree_d_item* this, int num_of_tabs)
     if(this->left == NULL)
         return;
 
-    // RIGHT
-
-    //printtabs(num_of_tabs);
-    //printf("(\n");
-
     Tree_d_item_dump(this->left, num_of_tabs + 1);
 
-    //printtabs(num_of_tabs);
-    //printf(")\n");
-
-    // LEFT
-
-    //printtabs(num_of_tabs);
-    //printf("(\n");
-
     Tree_d_item_dump(this->right, num_of_tabs + 1);
-
-    //printtabs(num_of_tabs);
-    //printf(")\n");
     return;
 }
 
@@ -210,6 +203,54 @@ char get_argc(char f)
 
     return -1;
 }
+
+int get_fix(char f)
+{
+    switch(f)
+    {
+    case F_SIN:
+    case F_COS:
+    case F_LN:
+    case F_LOG:
+        return PREFIX;
+        break;
+
+    default:
+        return INFIX;
+        break;
+    }
+
+    return -1;
+}
+
+void fprintfunc(FILE* outfile, char f)
+{
+    switch(f)
+    {
+    case F_SIN:
+        fprintf(outfile, "sin");
+        break;
+
+    case F_COS:
+        fprintf(outfile, "cos");
+        break;
+
+    case F_LN:
+        fprintf(outfile, "ln");
+        break;
+
+    case F_LOG:
+        fprintf(outfile, "log");
+        break;
+
+    default:
+        fprintf(outfile, "%c", f);
+        break;
+    }
+
+    return;
+}
+
 
 struct Tree_d_item* Tree_d_item_load(FILE* infile, struct Tree_d* this)
 {
@@ -414,13 +455,13 @@ void Tree_d_diff(struct Tree_d* old, struct Tree_d* new)
 }
 
 
-struct Tree_d_item* Tree_d_item_ease(struct Tree_d_item* this)
+struct Tree_d_item* Tree_d_item_ease(struct Tree_d_item* this, int accuracy)
 {
     if(this == NULL)
         return NULL;
 
-    this->left = Tree_d_item_ease(this->left);
-    this->right = Tree_d_item_ease(this->right);
+    this->left = Tree_d_item_ease(this->left, accuracy);
+    this->right = Tree_d_item_ease(this->right, accuracy);
 
     if(IS_MUL(this) && IS_CONST(this->left) && this->left->data.val == 0)   // 0*
     {
@@ -506,27 +547,35 @@ struct Tree_d_item* Tree_d_item_ease(struct Tree_d_item* this)
         return Tree_d_item_create(CONST, 0, NULL, NULL);
     }
 
+    // ln0
+    //logx0
+    //log1x
+
     if(this->type == OP && IS_CONST(this->left) && this->right == NULL)
     {
-        return this;
-
         float a = this->left->data.val;
-
-        Tree_d_item_delete(this);
 
         switch(this->data.code)
         {
         case F_SIN:
-            //return CONST(sin(a));
+            if(accuracy == 0)
+                return this;
+            Tree_d_item_delete(this);
+            return CONST(sin(a));
             break;
 
         case F_COS:
-            //return CONST(cos(a));
+            if(accuracy == 0)
+                return this;
+            Tree_d_item_delete(this);
+            return CONST(cos(a));
             break;
 
         case F_LN:
-            //return CONST(ln(a));
-            //return CONST(log(a));
+            if(accuracy == 0)
+                return this;
+            Tree_d_item_delete(this);
+            return CONST(log(a));
             break;
         }
     }
@@ -535,8 +584,6 @@ struct Tree_d_item* Tree_d_item_ease(struct Tree_d_item* this)
     {
         float a = this->left->data.val;
         float b = this->right->data.val;
-
-        //Tree_d_item_delete(this);
 
         switch(this->data.code)
         {
@@ -553,29 +600,191 @@ struct Tree_d_item* Tree_d_item_ease(struct Tree_d_item* this)
             break;
 
         case '/':
-            //return CONST(a / b);
-            return this;
+            if(accuracy == 0)
+                return this;
+            Tree_d_item_delete(this);
+            return CONST(a / b);
             break;
 
         case '^':
+            if(accuracy == 0)
+                return this;
+            Tree_d_item_delete(this);
             return CONST(pow(a, b));
             break;
 
         case F_LOG:
-            //return CONST(log(b)/log(a));
-            return this;
+            if(accuracy == 0)
+                return this;
+            Tree_d_item_delete(this);
+            return CONST(log(b)/log(a));
             break;
         }
     }
-
     return this;
 }
 
-void Tree_d_ease(struct Tree_d* this)
+void Tree_d_ease(struct Tree_d* this, int accuracy)
 {
     assert(this != NULL);
 
-    this->root = Tree_d_item_ease(this->root);
+    this->root = Tree_d_item_ease(this->root, accuracy);
+    return;
+}
+
+void Tree_d_item_save(FILE* outfile, struct Tree_d_item* this)
+{
+    assert(outfile != NULL);
+
+    if(this == NULL)
+        return;
+
+    if(this->type == OP && get_fix(this->data.code) == PREFIX)
+    {
+        fprintfunc(outfile, this->data.code);
+
+        fprintf(outfile, "(");
+
+        Tree_d_item_save(outfile, this->left);
+
+        if(this->right != NULL)
+        {
+            fprintf(outfile, ", ");
+
+            fprintf(outfile, "(");
+            Tree_d_item_save(outfile, this->right);
+            fprintf(outfile, ")");
+        }
+        fprintf(outfile, ")");
+
+    }
+
+    if(this->type == OP && get_fix(this->data.code) == INFIX)
+    {
+        fprintf(outfile, "(");
+        Tree_d_item_save(outfile, this->left);
+        fprintf(outfile, ")");
+
+        fprintfunc(outfile, this->data.code);
+
+        fprintf(outfile, "(");
+        Tree_d_item_save(outfile, this->right);
+        fprintf(outfile, ")");
+    }
+
+    if(this->type == CONST)
+    {
+        fprintf(outfile, "%g", this->data.val);
+    }
+
+    if(this->type == VAR)
+    {
+        fprintf(outfile, "%c", this->data.code);
+    }
+
+    return;
+}
+
+void Tree_d_save(struct Tree_d* this)
+{
+    FILE* outfile = fopen("save.txt", "w");
+    Tree_d_item_save(outfile, this->root);
+    fclose(outfile);
+    return;
+}
+
+void Tree_d_item_tex(FILE* outfile, struct Tree_d_item* this)
+{
+    assert(outfile != NULL);
+
+    if(this == NULL)
+        return;
+
+    if(this->type == OP)
+    {
+        switch(this->data.code)
+        {
+        case F_SIN:
+        case F_COS:
+        case F_LN:
+            fprintfunc(outfile, this->data.code);
+            fprintf(outfile, "(");
+            Tree_d_item_tex(outfile, this->left);
+            fprintf(outfile, ")");
+            break;
+
+        case '+':
+        case '-':
+            fprintf(outfile, "(");
+            Tree_d_item_tex(outfile, this->left);
+            fprintf(outfile, ")");
+
+            fprintfunc(outfile, this->data.code);
+
+            fprintf(outfile, "(");
+            Tree_d_item_tex(outfile, this->right);
+            fprintf(outfile, ")");
+            break;
+
+        case '*':
+            fprintf(outfile, "(");
+            Tree_d_item_tex(outfile, this->left);
+            fprintf(outfile, ")");
+
+            fprintf(outfile, "\\cdot");
+
+            fprintf(outfile, "(");
+            Tree_d_item_tex(outfile, this->right);
+            fprintf(outfile, ")");
+            break;
+
+        case '/':
+            fprintf(outfile, "\\frac");
+
+            fprintf(outfile, "{");
+            Tree_d_item_tex(outfile, this->left);
+            fprintf(outfile, "}");
+
+            fprintf(outfile, "{");
+            Tree_d_item_tex(outfile, this->right);
+            fprintf(outfile, "}");
+            break;
+        }
+    }
+/*
+    if(this->type == OP && get_fix(this->data.code) == INFIX)
+    {
+        fprintf(outfile, "(");
+        Tree_d_item_save(outfile, this->left);
+        fprintf(outfile, ")");
+
+        texfunc(outfile, this->data.code);
+
+        fprintf(outfile, "(");
+        Tree_d_item_save(outfile, this->right);
+        fprintf(outfile, ")");
+    }*/
+
+    if(this->type == CONST)
+    {
+        fprintf(outfile, "%g", this->data.val);
+    }
+
+    if(this->type == VAR)
+    {
+        fprintf(outfile, "{%c}", this->data.code);
+    }
+
+    return;
+}
+
+void Tree_d_tex(struct Tree_d* this)
+{
+    assert(this != NULL);
+
+    FILE* outfile = fopen("save.tex", "w");
+    Tree_d_item_tex(outfile, this->root);
+    fclose(outfile);
     return;
 }
 
@@ -595,8 +804,11 @@ int main()
     Tree_d_dump(&original);
     Tree_d_dump(&diff);
 
-    Tree_d_ease(&diff);
+    Tree_d_ease(&diff, 0);
     Tree_d_dump(&diff);
+
+    Tree_d_save(&diff);
+    Tree_d_tex(&diff);
 
     Tree_d_destructor(&diff);
     Tree_d_destructor(&original);

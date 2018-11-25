@@ -1,5 +1,5 @@
 # depslib dependency file v1.0
-1542999915 source:/home/oleg/code_blocks_projects/c_diff/main.c
+1543044301 source:/home/oleg/code_blocks_projects/c_diff/main.c
 	<stdio.h>
 	<stdlib.h>
 	<assert.h>
